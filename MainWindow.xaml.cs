@@ -417,7 +417,14 @@ namespace INGST
                         if (copyCancellationTokenSource.Token.IsCancellationRequested)
                             break;
 
-                        string destPath = Path.Combine(camFolder, Path.GetFileName(file.Path));
+                        // Create new filename with project code and camera name prefix
+                        string originalFileName = Path.GetFileName(file.Path);
+                        string fileExtension = Path.GetExtension(file.Path);
+                        string fileNameWithoutExt = Path.GetFileNameWithoutExtension(file.Path);
+                        string cameraName = cam.Name.ToLower().Replace(" ", "_");
+                        string newFileName = $"{projectCode}_{cameraName}_{fileNameWithoutExt}{fileExtension}";
+                        
+                        string destPath = Path.Combine(camFolder, newFileName);
                         await CopyFileWithProgressAsync(file, destPath, copyCancellationTokenSource.Token);
                         
                         if (!copyCancellationTokenSource.Token.IsCancellationRequested)
@@ -434,8 +441,13 @@ namespace INGST
                     if (copyCancellationTokenSource.Token.IsCancellationRequested)
                         break;
 
-                    // Use the destination filename to avoid overwrites
-                    string destPath = Path.Combine(fullProjectPath, "RAW zvuk", file.DestinationFileName);
+                    // Create new filename with project code prefix for audio files too
+                    string originalFileName = file.DestinationFileName;
+                    string fileExtension = Path.GetExtension(originalFileName);
+                    string fileNameWithoutExt = Path.GetFileNameWithoutExtension(originalFileName);
+                    string newFileName = $"{projectCode}_{fileNameWithoutExt}{fileExtension}";
+                    
+                    string destPath = Path.Combine(fullProjectPath, "RAW zvuk", newFileName);
                     await CopyFileWithProgressAsync(file, destPath, copyCancellationTokenSource.Token);
                     
                     if (!copyCancellationTokenSource.Token.IsCancellationRequested)
@@ -564,7 +576,30 @@ namespace INGST
                 // Update UI for current file
                 await Dispatcher.InvokeAsync(() =>
                 {
-                    CurrentFileText.Text = $"Copying: {file.DisplayName}";
+                    string displayName = file.DisplayName;
+                    if (file.Type == "video")
+                    {
+                        // For video files, show the new filename that will be created
+                        string projectCode = ProjectCodeBox.Text.Trim();
+                        string cameraName = GetCameraNameForFile(file);
+                        if (!string.IsNullOrEmpty(cameraName))
+                        {
+                            string fileNameWithoutExt = Path.GetFileNameWithoutExtension(file.Path);
+                            string fileExtension = Path.GetExtension(file.Path);
+                            displayName = $"{projectCode}_{cameraName}_{fileNameWithoutExt}{fileExtension}";
+                        }
+                    }
+                    else if (file.Type == "audio")
+                    {
+                        // For audio files, show the new filename that will be created
+                        string projectCode = ProjectCodeBox.Text.Trim();
+                        string originalFileName = file.DestinationFileName;
+                        string fileNameWithoutExt = Path.GetFileNameWithoutExtension(originalFileName);
+                        string fileExtension = Path.GetExtension(originalFileName);
+                        displayName = $"{projectCode}_{fileNameWithoutExt}{fileExtension}";
+                    }
+                    
+                    CurrentFileText.Text = $"Copying: {displayName}";
                     FileProgressBar.Value = 0;
                     FileProgressText.Text = "0%";
                     StatusText.Text = "Copying...";
@@ -766,6 +801,19 @@ namespace INGST
         private double GetTotalSizeGB(IEnumerable<IngestFile> files)
         {
             return files.Sum(f => f.SizeGB);
+        }
+
+        private string GetCameraNameForFile(IngestFile file)
+        {
+            // Find which camera this file belongs to
+            foreach (var cam in cameras)
+            {
+                if (cam.Files.Contains(file))
+                {
+                    return cam.Name.ToLower().Replace(" ", "_");
+                }
+            }
+            return string.Empty;
         }
     }
 }
